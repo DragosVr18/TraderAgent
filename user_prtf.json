@@ -1,0 +1,9 @@
+{
+    "stocks" : {
+        "AAPL" : 50,
+        "NVDA" : 40,
+        "AMZN" : 25,
+        "GOOGL" : 30,
+        "MSFT" : 20
+    }
+}
