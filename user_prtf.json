@@ -1,15 +1,16 @@
 {
-    "stocks" : {
-        "AAPL" : 50,
-        "NVDA" : 40,
-        "AMZN" : 25,
-        "GOOGL" : 30,
-        "MSFT" : 20,
-        "TSLA" : 15,
-        "META" : 10,
-        "NFLX" : 5,
-        "INTC" : 100,
-        "ORCL" : 60,
-        "PLTR" : 80
+    "budget": 81895.64120483398,
+    "stocks": {
+        "AAPL": 95,
+        "NVDA": 35,
+        "AMZN": 33,
+        "GOOGL": 32,
+        "MSFT": 32,
+        "TSLA": 15,
+        "META": 16,
+        "NFLX": 3,
+        "INTC": 100,
+        "ORCL": 60,
+        "PLTR": 80
     }
 }

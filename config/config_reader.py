@@ -26,6 +26,8 @@ config = load_config()
 
 API_KEY = config['api']['finnhub_key']
 FETCH_INTERVAL = config['fetch_interval']
+TOOLS_API_URL = config['tools_url']
+SYSTEM_PROMPT = config['system_prompt']
 
 
 if __name__ == "__main__":
