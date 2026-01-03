@@ -27,6 +27,6 @@ def fetch_stock_value(ticker_symbol, interval, period, count=None):
 
 if __name__ == "__main__":
     symbol = "AAPL"
-    count = 5
-    stock_data = fetch_stock_value(symbol, count=count, interval='15m', period='5d')
-    print(stock_data)
+    count = None
+    stock_data = fetch_stock_value(symbol, count=count, interval='5m', period='60d')
+    print(len(stock_data))

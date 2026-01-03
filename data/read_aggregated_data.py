@@ -3,12 +3,13 @@ import numpy as np
 import json
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / 'data_aggregated'
+DATA_DIR = Path(__file__).parent.parent / 'data_aggregated_v3'
 NEWS_COUNT = 3
+BAR_COUNT = 12
 
 def read_stock_values(step):
     """
-    Read the next 4 bars for each ticker starting from the given step.
+    Read the next BAR_COUNT bars for each ticker starting from the given step.
     
     Parameters:
     step (int): The starting index (0-based) for reading bars.
@@ -22,8 +23,8 @@ def read_stock_values(step):
     
     result = {}
     for ticker, bars in all_data.items():
-        start_idx = step * 4
-        end_idx = start_idx + 4
+        start_idx = step * BAR_COUNT
+        end_idx = start_idx + BAR_COUNT
         
         if start_idx < len(bars):
             result[ticker] = bars[start_idx:end_idx]

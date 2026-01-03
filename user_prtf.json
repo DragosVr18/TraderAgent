@@ -4,6 +4,12 @@
         "NVDA" : 40,
         "AMZN" : 25,
         "GOOGL" : 30,
-        "MSFT" : 20
+        "MSFT" : 20,
+        "TSLA" : 15,
+        "META" : 10,
+        "NFLX" : 5,
+        "INTC" : 100,
+        "ORCL" : 60,
+        "PLTR" : 80
     }
 }
