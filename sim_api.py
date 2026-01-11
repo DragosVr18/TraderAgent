@@ -81,6 +81,8 @@ def value_predict():
         }
 
     current = {ticker: bars[-1] for ticker, bars in stock_values.items() if bars is not None and len(bars) > 0}
+    print(current)
+    # current = {ticker: bars[-1] for ticker, bars in stock_values.items()}
     
     step += 1
 
