@@ -1,3 +1,5 @@
 /checkpoints
 /data_aggregated*
 /logs
+
+__pycache__/
