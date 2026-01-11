@@ -22,6 +22,7 @@ llm = ChatOpenAI(
 
 FETCH_VALUES = True
 STOCK_VALUES_ENDPOINT = f"{TOOLS_API_URL}/valuepredict"
+NUM_ITERATIONS = 1
 stock_predictions = {}
 stock_current = {}
 
@@ -104,6 +105,7 @@ tools_dict = {tool.name: tool for tool in tools}
 class AgentState(TypedDict):
     """State for the LangGraph agent: a list of messages."""
     messages: Annotated[List[BaseMessage], add_messages]
+    phase: str  # Track current phase: 'predict', 'decide', or 'done'
 
 def parse_tool_call(text: str):
     """Parse tool calls from LLM text response using ReAct-style format."""
@@ -112,66 +114,111 @@ def parse_tool_call(text: str):
     matches = re.findall(tool_pattern, text)
     return matches
 
-def agent_node(state: AgentState) -> AgentState:
-    """Call the LLM and parse for tool calls in the response text."""
+def predict_node(state: AgentState) -> AgentState:
+    """Phase 1: Get predictions for all stocks."""
+    # Check if we already have predictions
+    last_message = state["messages"][-1] if state["messages"] else None
+    if last_message and "Tool Result" in str(last_message.content):
+        # Already have predictions, move to decide phase
+        return {"phase": "decide"}
+    
     response = llm.invoke(state["messages"])
     
-    # Check if the response contains tool call instructions
+    # Parse and execute ONLY stock_value_prediction tools
     tool_calls = parse_tool_call(response.content)
+    prediction_calls = [(name, arg1, arg2, arg3) for name, arg1, arg2, arg3 in tool_calls 
+                        if name == "stock_value_prediction"]
     
-    if tool_calls:
-        print(f"\n[DEBUG] Found {len(tool_calls)} tool call(s) in response")
-        # Execute ALL tool calls found
+    if prediction_calls:
+        print(f"\n[PREDICT PHASE] Found {len(prediction_calls)} prediction call(s)")
         results = []
-        for tool_name, arg1, arg2, arg3 in tool_calls:
-            print(f"[DEBUG] Executing: {tool_name}({arg1}, {arg2}, {arg3})")
-            
-            if tool_name == "stock_value_prediction":
-                result = stock_value_prediction.invoke({"ticker": arg1})
-                results.append(f"[{arg1}] {result}")
-            elif tool_name == "update_portolio" and arg2 and arg3:
-                result = update_portolio.invoke({"ticker": arg1, "action": arg2, "quantity": int(arg3)})
-                results.append(f"[{arg1}] {result}")
-            else:
-                results.append(f"Error: Invalid tool call for {tool_name}")
+        for tool_name, ticker, _, _ in prediction_calls:
+            print(f"[PREDICT PHASE] Executing: {tool_name}({ticker})")
+            result = stock_value_prediction.invoke({"ticker": ticker})
+            results.append(f"[{ticker}] {result}")
         
-        # Add the tool results as a message
         combined_results = "\n".join(results)
-        return {"messages": [response, AIMessage(content=f"Tool Results:\n{combined_results}")]}
+        return {
+            "messages": [response, AIMessage(content=f"Tool Results:\n{combined_results}")],
+            "phase": "decide"
+        }
     
-    return {"messages": [response]}
+    return {"messages": [response], "phase": "decide"}
 
-def should_continue(state: AgentState) -> str:
-    """Determine if we should continue or end."""
-    last_message = state["messages"][-1]
+def decide_node(state: AgentState) -> AgentState:
+    """Phase 2: Agent analyzes predictions and decides on trades."""
+    # Add a very directive message forcing tool usage
+    decision_prompt = HumanMessage(content="""NOW execute trades based on the predictions.
+
+You MUST call update_portolio tool for stocks you want to trade. Do NOT explain, just write the tool calls:
+
+update_portolio("TICKER", "buy", quantity)
+update_portolio("TICKER", "sell", quantity)
+
+Write the actual tool calls now:""")
     
-    # Check if we've done too many iterations
-    if len(state["messages"]) > 30:
+    response = llm.invoke(state["messages"] + [decision_prompt])
+    
+    # Parse and execute ONLY update_portolio tools
+    tool_calls = parse_tool_call(response.content)
+    update_calls = [(name, arg1, arg2, arg3) for name, arg1, arg2, arg3 in tool_calls 
+                    if name == "update_portolio" and arg2 and arg3]
+    
+    if update_calls:
+        print(f"\n[EXECUTE PHASE] Found {len(update_calls)} trade call(s)")
+        results = []
+        for tool_name, ticker, action, quantity in update_calls:
+            print(f"[EXECUTE PHASE] Executing: {tool_name}({ticker}, {action}, {quantity})")
+            result = update_portolio.invoke({"ticker": ticker, "action": action, "quantity": int(quantity)})
+            results.append(f"[{ticker}] {result}")
+        
+        combined_results = "\n".join(results)
+        return {
+            "messages": [decision_prompt, response, AIMessage(content=f"Trade Results:\n{combined_results}")],
+            "phase": "done"
+        }
+    
+    print("\n[EXECUTE PHASE] WARNING: No trade calls found in response!")
+    print(f"[EXECUTE PHASE] Response was: {response.content[:200]}...")
+    return {"messages": [decision_prompt, response], "phase": "done"}
+
+def route_phase(state: AgentState) -> str:
+    """Route to appropriate phase based on state."""
+    phase = state.get("phase", "predict")
+    
+    if phase == "predict":
+        return "predict"
+    elif phase == "decide":
+        return "decide"
+    else:
         return "end"
-    
-    # Check if last message contains tool calls - if so, continue
-    if isinstance(last_message, AIMessage) and last_message.content:
-        if parse_tool_call(last_message.content):
-            return "continue"
-    
-    # If the last message contains tool results, continue to let agent respond
-    if last_message.content and ("Tool Result" in last_message.content):
-        return "continue"
-    
-    # If no tool calls and no tool results, we're probably done
-    return "end"
 
 graph_builder = StateGraph(AgentState)
 
-graph_builder.add_node("agent", agent_node)
+# Add nodes for each phase
+graph_builder.add_node("predict", predict_node)
+graph_builder.add_node("decide", decide_node)
 
-graph_builder.add_edge(START, "agent")
+# Start at predict phase
+graph_builder.add_edge(START, "predict")
+
+# Route based on phase
+graph_builder.add_conditional_edges(
+    "predict",
+    route_phase,
+    {
+        "predict": "predict",
+        "decide": "decide",
+        "end": END,
+    },
+)
 
 graph_builder.add_conditional_edges(
-    "agent",
-    should_continue,
+    "decide",
+    route_phase,
     {
-        "continue": "agent",
+        "predict": "predict",
+        "decide": "decide",
         "end": END,
     },
 )
@@ -183,18 +230,27 @@ def run_agent(user_input: str):
         "messages": [
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=user_input),
-        ]
+        ],
+        "phase": "predict"
     }
     final_state = agent_graph.invoke(initial_state, config={"recursion_limit": 10})
     return final_state
 
-portofolio = json.load(open('user_prtf.json'))
-stocks_list = list(portofolio.get('stocks', {}).keys())
+def run_trading_iteration(iteration_num: int):
+    """Run a single trading iteration."""
+    global FETCH_VALUES
+    
+    print(f"\n{'='*60}")
+    print(f"ITERATION {iteration_num}")
+    print(f"{'='*60}\n")
+    
+    portofolio = json.load(open('user_prtf.json'))
+    stocks_list = list(portofolio.get('stocks', {}).keys())
 
-# Create explicit tool call examples for all stocks
-tool_examples = "\n".join([f'stock_value_prediction("{ticker}")' for ticker in stocks_list])
+    # Create explicit tool call examples for all stocks
+    tool_examples = "\n".join([f'stock_value_prediction("{ticker}")' for ticker in stocks_list])
 
-user_prompt = f"""Current Portfolio: {portofolio}
+    user_prompt = f"""Current Portfolio: {portofolio}
 
 You must analyze ALL these stocks: {stocks_list}
 
@@ -203,9 +259,23 @@ Call the stock_value_prediction tool for each ticker like this:
 
 Do this now."""
 
-result = run_agent(user_prompt)
-for m in result["messages"]:
-    print(f"[{m.type}] {m.content}")
+    result = run_agent(user_prompt)
+    for m in result["messages"]:
+        print(f"[{m.type}] {m.content}")
 
-FETCH_VALUES = True
+    # Reset the fetch flag for next iteration
+    FETCH_VALUES = True
+    
+    return result
+
+# Main execution loop
+if __name__ == "__main__":
+    print(f"\nStarting trading agent for {NUM_ITERATIONS} iterations...\n")
+    
+    for i in range(1, NUM_ITERATIONS + 1):
+        run_trading_iteration(i)
+    
+    print(f"\n{'='*60}")
+    print(f"Completed all {NUM_ITERATIONS} iterations")
+    print(f"{'='*60}\n")
 
