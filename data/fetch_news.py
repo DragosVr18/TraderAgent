@@ -23,6 +23,8 @@ def fetch_stock_news(api_key, symbol, count=None, from_date=date.today(), to_dat
         return news
     
 if __name__ == "__main__":
+    import sys
+    sys.path.append("/teamspace/studios/this_studio/TraderAgent")
     from config import API_KEY
 
     symbol = "AAPL"

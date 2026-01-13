@@ -1,5 +1,6 @@
 from modules.stock_info_lstm import CandleLSTM
-from data.read_aggregated_data import read_stock_values
+from modules.news_info_sllm import StockLLMAgent
+from data.read_aggregated_data import read_stock_values, read_stock_values_v2
 import fastapi
 
 LSTM_CHECKPOINT_PATH = "/teamspace/studios/this_studio/TraderAgent/checkpoints/lstm-epoch=29-val_loss=0.1344.ckpt"
@@ -20,9 +21,21 @@ def load_candle_model(checkpoint_filepath, device='cpu'):
     model.eval()
     return model
 
+def load_news_model():
+    llm_agent = StockLLMAgent(
+        model_name="llama3.2:3b",
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+        prompt_yaml_path="/teamspace/studios/this_studio/TraderAgent/config/config_class.yaml",
+        temperature=0.0,
+    )
+    print("Stock LLM agent loaded successfully.")
+    return llm_agent
+
 app = fastapi.FastAPI()
 model = None
 step = 0
+
 
 @app.on_event("startup")
 def startup_event():
@@ -30,13 +43,18 @@ def startup_event():
     model = load_candle_model(LSTM_CHECKPOINT_PATH)
     print("CandleLSTM model loaded successfully.")
 
+    global llm_agent
+    llm_agent = load_news_model()
+    print("Classification model loaded successfully.")
+
+
 @app.get("/valuepredict")
 def value_predict():
     if model is None:
         return {"error": "Model not loaded yet."}
 
     global step
-    stock_values = read_stock_values(step)
+    stock_values = read_stock_values_v2(step)
     predictions = {}
     current = {}
 
@@ -89,3 +107,24 @@ def value_predict():
     result = {"predictions": predictions, "current": current}
 
     return result
+
+
+@app.get("/analyzenews")
+def analyze_stock(news: str):
+    """
+    Endpoint to classify or analyze stock news via LLM.
+    
+    Args:
+        news: Stock news text
+    
+    Returns:
+        LLM response text
+    """
+    if llm_agent is None:
+        return {"error": "LLM agent not loaded yet."}
+
+    
+    
+    response = llm_agent.run(news)
+    return {"response": response}
+
