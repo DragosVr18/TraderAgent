@@ -39,16 +39,49 @@ class TradingAgent:
         
         self.tools_api_url = tools_api_url
         self.stock_values_endpoint = f"{tools_api_url}/valuepredict"
+
+        self.news_sentiment_endpoint = f"{tools_api_url}/analyzenews"
         
         # State variables
         self.stock_predictions = {}
         self.stock_current = {}
         self.fetch_values = True
+
+        self.fetch_news = True
         self.portfolio_file = None
         self.trade_history = []
         
         # Build the agent graph
         self._build_graph()
+
+
+    def _news_sentiment_tool(self, ticker: str) -> str:
+        """
+        Analyze news sentiment for a given ticker.
+        
+        Args:
+            ticker: Stock ticker symbol
+        Returns:
+            str: Sentiment analysis result or error message
+        """
+        if self.fetch_news:
+            try:
+                response = requests.get(f"{self.news_sentiment_endpoint}")
+                if response.status_code == 200:
+                    data = response.json()
+                    sentiment = data.get("sentiment", "No sentiment data available.")
+                    self.sentiments = data.get("sentiments", {})
+                    return f"News sentiment for {ticker}: {sentiment}"
+                else:
+                    return f"Error fetching news sentiment: {response.status_code}"
+            except Exception as e:
+                return f"Error connecting to news API: {str(e)}"
+
+        if ticker in self.sentiments:
+            sentiment = self.sentiments[ticker]
+
+
+            #NOTE: Aici de facut modificarile in continuare...
     
     def _stock_value_prediction_tool(self, ticker: str) -> str:
         """
@@ -287,6 +320,7 @@ Write the actual tool calls now:""")
         """
         # Reset fetch_values flag at the start of each iteration
         self.fetch_values = True
+        self.fetch_news = True
         self.trade_history = []
         
         # Load current portfolio
@@ -348,6 +382,7 @@ Do this now."""
         for i in range(1, num_iterations + 1):
             # Reset fetch_values flag before each iteration
             self.fetch_values = True
+            self.fetch_news = True
             
             if progress_callback:
                 progress_callback(i, num_iterations, f"Running iteration {i}/{num_iterations}")

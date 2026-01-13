@@ -176,8 +176,8 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         initial_summary_shown = False
         
         for i in range(1, num_iterations + 1):
-            with open("date.txt", "w") as date_file:
-                date_file.write(f"{i}\n")
+            with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "w") as date_file:
+                date_file.write(f"{i+30}\n")
             
             # Run single iteration
             agent.fetch_values = True
@@ -411,8 +411,8 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
             iterations_input = gr.Slider(
                 label="Number of Iterations",
                 minimum=1,
-                maximum=10,
-                value=4,
+                maximum=20,
+                value=5,
                 step=1,
                 info="How many trading cycles to run"
             )

@@ -97,7 +97,7 @@ from datetime import datetime, timezone
 
 def read_stock_news_v2(
     cutoff_date_str: str,
-    max_items: int = 100,
+    max_items: int = 3,
 ):
     """
     cutoff_date_str format: YYYY-MM-DD
@@ -110,16 +110,22 @@ def read_stock_news_v2(
 
     collected = []
 
+    result = {}
+
     for ticker, news_list in data.items():
-        for item in news_list:
-            if item.get("datetime", 0) < cutoff_ts:
-                collected.append(item)
+        # Filter items before the cutoff
+        filtered = [
+            item for item in news_list
+            if item.get("datetime", 0) < cutoff_ts
+        ]
 
-    # Sort by datetime descending (most recent first)
-    collected.sort(key=lambda x: x["datetime"], reverse=True)
+        # Sort by datetime descending (most recent first)
+        filtered.sort(key=lambda x: x.get("datetime", 0), reverse=True)
 
-    # Return only the requested number
-    return collected[:max_items]
+        # Keep only the requested number
+        result[ticker] = filtered[:max_items]
+
+    return result
 
 
 if __name__ == "__main__":
