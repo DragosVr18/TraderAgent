@@ -4,6 +4,7 @@ import pandas as pd
 from pathlib import Path
 import tempfile
 from trader_gr import TradingAgent
+import requests
 
 # Initialize the trading agent
 agent = TradingAgent()
@@ -31,26 +32,49 @@ def format_trade_history(results):
     df = pd.DataFrame(all_trades)
     return df
 
-def format_portfolio_comparison(initial, final, stock_prices):
-    """Format initial vs final portfolio comparison with total value."""
-    # Calculate total values
+def format_portfolio_comparison(initial, final, initial_stock_prices, final_stock_prices):
+    """Format initial vs final portfolio comparison with total value including price changes."""
+    # Calculate initial total value (using initial prices)
     initial_cash = initial.get('budget', 0)
-    final_cash = final.get('budget', 0)
-    
     initial_stocks_value = 0
-    final_stocks_value = 0
     
     for ticker, qty in initial.get('stocks', {}).items():
-        price = stock_prices.get(ticker, {}).get('Close', 0)
+        price = initial_stock_prices.get(ticker, {}).get('Close', 0)
         initial_stocks_value += qty * price
     
+    initial_total = initial_cash + initial_stocks_value
+    
+    # Calculate final total value (using final/current prices)
+    final_cash = final.get('budget', 0)
+    final_stocks_value = 0
+    
     for ticker, qty in final.get('stocks', {}).items():
-        price = stock_prices.get(ticker, {}).get('Close', 0)
+        price = final_stock_prices.get(ticker, {}).get('Close', 0)
         final_stocks_value += qty * price
     
-    initial_total = initial_cash + initial_stocks_value
     final_total = final_cash + final_stocks_value
+    
+    # Calculate baseline (no-trade) portfolio value
+    # What would the portfolio be worth if we held initial positions at final prices?
+    baseline_cash = initial_cash
+    baseline_stocks_value = 0
+    
+    for ticker, qty in initial.get('stocks', {}).items():
+        final_price = final_stock_prices.get(ticker, {}).get('Close', 0)
+        baseline_stocks_value += qty * final_price
+    
+    baseline_total = baseline_cash + baseline_stocks_value
+    
+    # Calculate changes
     total_change = final_total - initial_total
+    total_change_pct = ((total_change / initial_total) * 100) if initial_total > 0 else 0
+    
+    # Calculate trading performance vs baseline
+    baseline_change = baseline_total - initial_total
+    baseline_change_pct = ((baseline_change / initial_total) * 100) if initial_total > 0 else 0
+    
+    trading_alpha = final_total - baseline_total  # How much better/worse than doing nothing
+    trading_alpha_pct = ((trading_alpha / baseline_total) * 100) if baseline_total > 0 else 0
     
     comparison = "### Portfolio Comparison\n\n"
     comparison += "#### Cash & Assets\n\n"
@@ -63,25 +87,46 @@ def format_portfolio_comparison(initial, final, stock_prices):
     comparison += f"**Final Total Value:** ${final_total:,.2f}\n\n"
     
     change_symbol = "📈" if total_change >= 0 else "📉"
-    comparison += f"{change_symbol} **Total Change:** ${total_change:,.2f} ({((total_change/initial_total)*100):.2f}%)\n\n"
+    comparison += f"{change_symbol} **Total Change:** ${total_change:,.2f} ({total_change_pct:+.2f}%)\n\n"
+    
+    # Add baseline comparison
+    comparison += "#### 📊 No-Trade Baseline (Hold Strategy)\n\n"
+    comparison += f"**Baseline Portfolio Value:** ${baseline_total:,.2f}\n"
+    comparison += f"**Baseline Change:** ${baseline_change:,.2f} ({baseline_change_pct:+.2f}%)\n\n"
+    
+    # Trading performance vs baseline
+    alpha_symbol = "✅" if trading_alpha >= 0 else "❌"
+    comparison += f"{alpha_symbol} **Trading Alpha (vs Hold):** ${trading_alpha:,.2f} ({trading_alpha_pct:+.2f}%)\n"
+    
+    if trading_alpha >= 0:
+        comparison += f"*Your trading strategy outperformed a simple hold strategy!*\n\n"
+    else:
+        comparison += f"*A hold strategy would have performed better.*\n\n"
+    
+    comparison += "---\n\n"
     
     comparison += "#### Stock Holdings\n\n"
-    comparison += "| Ticker | Initial | Final | Change | Current Price | Value Change |\n"
-    comparison += "|--------|---------|-------|--------|---------------|-------------|\n"
+    comparison += "| Ticker | Initial Qty | Final Qty | Qty Change | Initial Price | Final Price | Value Change |\n"
+    comparison += "|--------|-------------|-----------|------------|---------------|-------------|-------------|\n"
     
     all_tickers = set(list(initial.get('stocks', {}).keys()) + list(final.get('stocks', {}).keys()))
     
     for ticker in sorted(all_tickers):
         init_qty = initial.get('stocks', {}).get(ticker, 0)
         final_qty = final.get('stocks', {}).get(ticker, 0)
-        change = final_qty - init_qty
-        change_str = f"+{change}" if change > 0 else str(change)
+        qty_change = final_qty - init_qty
+        qty_change_str = f"+{qty_change}" if qty_change > 0 else str(qty_change)
         
-        price = stock_prices.get(ticker, {}).get('Close', 0)
-        value_change = change * price
-        value_change_str = f"+${value_change:.2f}" if value_change >= 0 else f"-${abs(value_change):.2f}"
+        init_price = initial_stock_prices.get(ticker, {}).get('Close', 0)
+        final_price = final_stock_prices.get(ticker, {}).get('Close', 0)
         
-        comparison += f"| {ticker} | {init_qty} | {final_qty} | {change_str} | ${price:.2f} | {value_change_str} |\n"
+        # Calculate value change: (final_qty * final_price) - (init_qty * init_price)
+        init_value = init_qty * init_price
+        final_value = final_qty * final_price
+        value_change = final_value - init_value
+        value_change_str = f"+${value_change:.2f}" if value_change >= 0 else f"-${abs(value_change):,.2f}"
+        
+        comparison += f"| {ticker} | {init_qty} | {final_qty} | {qty_change_str} | ${init_price:.2f} | ${final_price:.2f} | {value_change_str} |\n"
     
     return comparison
 
@@ -91,23 +136,18 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
     """
     try:
         # Progress tracking
-        # progress(0, desc="Setting up portfolio...")
         yield pd.DataFrame(), "", "⏳ Setting up portfolio...", ""
         
         # Determine portfolio source
         if json_file is not None:
-            # Load from uploaded JSON file
             portfolio = agent.load_portfolio_from_file(json_file)
             budget = portfolio.get("budget", 0)
             stocks = portfolio.get("stocks", {})
-            # progress(0.1, desc="Portfolio loaded from JSON file")
         else:
-            # Parse manual inputs from dataframe
             if not budget or budget <= 0:
                 yield pd.DataFrame(), "", "❌ Error: Please provide a valid budget.", ""
                 return
             
-            # Convert dataframe to stocks dictionary
             stocks = {}
             if stocks_df is not None and len(stocks_df) > 0:
                 for _, row in stocks_df.iterrows():
@@ -123,8 +163,6 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
                 yield pd.DataFrame(), "", "❌ Error: Please provide at least one stock holding.", ""
                 return
             
-            # Setup portfolio
-            # progress(0.1, desc="Portfolio setup complete")
             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
             temp_file.close()
             agent.setup_portfolio(budget, stocks, temp_file.name)
@@ -134,10 +172,12 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         # Run iterations with live updates
         all_results = []
         initial_portfolio = None
+        initial_stock_prices = None  # Will be captured on first iteration
         initial_summary_shown = False
         
         for i in range(1, num_iterations + 1):
-            # progress((0.1 + (i / num_iterations) * 0.8), desc=f"Running iteration {i}/{num_iterations}")
+            with open("date.txt", "w") as date_file:
+                date_file.write(f"{i}\n")
             
             # Run single iteration
             agent.fetch_values = True
@@ -151,7 +191,6 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
             
             stocks_list = list(portfolio.get('stocks', {}).keys())
             tool_examples = "\n".join([f'stock_value_prediction("{ticker}")' for ticker in stocks_list])
-            strategy_prompt = f"\n\nTrading Strategy: {strategy}\nYou must follow this strategy when making trading decisions."
             
             user_prompt = f"""Current Portfolio: {portfolio}
 
@@ -163,17 +202,23 @@ Call the stock_value_prediction tool for each ticker like this:
 Do this now."""
             
             from langchain_core.messages import SystemMessage, HumanMessage
-            from config.config_reader import SYSTEM_PROMPT
+            from config.config_reader import get_parameterized_system_prompt
+
+            SYSTEM_PROMPT = get_parameterized_system_prompt(strategy)
             
             initial_state = {
                 "messages": [
-                    SystemMessage(content=SYSTEM_PROMPT + strategy_prompt),
+                    SystemMessage(content=SYSTEM_PROMPT),
                     HumanMessage(content=user_prompt),
                 ],
                 "phase": "predict"
             }
             
             final_state = agent.agent_graph.invoke(initial_state, config={"recursion_limit": 10})
+            
+            # Capture initial stock prices from first iteration (after agent fetches them)
+            if initial_stock_prices is None:
+                initial_stock_prices = agent.stock_current.copy()
             
             with open(agent.portfolio_file, 'r') as file:
                 final_portfolio = json.load(file)
@@ -191,7 +236,7 @@ Do this now."""
             if not initial_summary_shown:
                 initial_cash = initial_portfolio.get('budget', 0)
                 initial_stocks_value = sum(
-                    initial_portfolio.get('stocks', {}).get(ticker, 0) * agent.stock_current.get(ticker, {}).get('Close', 0)
+                    initial_portfolio.get('stocks', {}).get(ticker, 0) * initial_stock_prices.get(ticker, {}).get('Close', 0)
                     for ticker in initial_portfolio.get('stocks', {}).keys()
                 )
                 initial_total = initial_cash + initial_stocks_value
@@ -219,7 +264,7 @@ Do this now."""
 **Iterations Completed:** {i}/{num_iterations}
 **Total Trades Executed:** {total_trades}
 
-{format_portfolio_comparison(initial_portfolio, final_portfolio, agent.stock_current)}
+{format_portfolio_comparison(initial_portfolio, final_portfolio, initial_stock_prices, agent.stock_current)}
 """
             
             progress_text = f"⏳ Iteration {i}/{num_iterations} complete. {total_trades} trade(s) so far..."
@@ -228,14 +273,13 @@ Do this now."""
             yield trade_history_df, summary, progress_text, status
         
         # Final update
-        # progress(1.0, desc="Complete!")
         trade_history_df = format_trade_history(all_results)
         total_trades = sum(len(r.get("trade_history", [])) for r in all_results)
         
         # Calculate initial total value
         initial_cash = initial_portfolio.get('budget', 0)
         initial_stocks_value = sum(
-            initial_portfolio.get('stocks', {}).get(ticker, 0) * agent.stock_current.get(ticker, {}).get('Close', 0)
+            initial_portfolio.get('stocks', {}).get(ticker, 0) * initial_stock_prices.get(ticker, {}).get('Close', 0)
             for ticker in initial_portfolio.get('stocks', {}).keys()
         )
         initial_total = initial_cash + initial_stocks_value
@@ -254,7 +298,7 @@ Do this now."""
 **Iterations Completed:** {num_iterations}
 **Total Trades Executed:** {total_trades}
 
-{format_portfolio_comparison(initial_portfolio, final_portfolio, agent.stock_current)}
+{format_portfolio_comparison(initial_portfolio, final_portfolio, initial_stock_prices, agent.stock_current)}
 """
         
         yield trade_history_df, summary, "✅ Trading completed successfully!", ""

@@ -10,7 +10,7 @@ from data.fetch_news import fetch_stock_news
 from data.fetch_value import fetch_stock_value
 from config import API_KEY
 
-NO_DAYS = 30
+NO_DAYS = 80
 INTERVAL = '1d'
 
 def aggregate_stock_data():
@@ -33,9 +33,10 @@ def aggregate_stock_data():
             API_KEY,
             symbol,
             count=None,
-            from_date=from_date,
-            to_date=to_date
+            from_date=str(from_date),
+            to_date=str(to_date)
         )
+        print(len(news_articles))
         stock_news[symbol] = news_articles
 
         # Fetch stock values
@@ -50,10 +51,10 @@ def aggregate_stock_data():
     # Save aggregated data to JSON files
     output_path = Path(__file__).parent.parent / 'data_aggregated_v4'
     output_path.mkdir(exist_ok=True)
-    with open(output_path / 'stock_news.json', 'w') as f:
-        json.dump(stock_news, f, default=str, indent=4)
-    # with open(output_path / 'stock_values.json', 'w') as f:
-    #    json.dump({k: v.reset_index().to_dict(orient='records') for k, v in stock_values.items()}, f, default=str, indent=4)
+    # with open(output_path / 'stock_news.json', 'w') as f:
+    #     json.dump(stock_news, f, default=str, indent=4)
+    with open(output_path / 'stock_values.json', 'w') as f:
+       json.dump({k: v.reset_index().to_dict(orient='records') for k, v in stock_values.items()}, f, default=str, indent=4)
 
 
 if __name__ == "__main__":

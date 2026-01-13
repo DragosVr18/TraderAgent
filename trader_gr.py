@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from config.config_reader import TOOLS_API_URL, SYSTEM_PROMPT
+from config.config_reader import TOOLS_API_URL, SYSTEM_PROMPT, get_parameterized_system_prompt
 
 
 class TradingAgent:
@@ -285,6 +285,7 @@ Write the actual tool calls now:""")
         Returns:
             dict: Results including trade history and final portfolio
         """
+        # Reset fetch_values flag at the start of each iteration
         self.fetch_values = True
         self.trade_history = []
         
@@ -345,6 +346,9 @@ Do this now."""
         all_results = []
         
         for i in range(1, num_iterations + 1):
+            # Reset fetch_values flag before each iteration
+            self.fetch_values = True
+            
             if progress_callback:
                 progress_callback(i, num_iterations, f"Running iteration {i}/{num_iterations}")
             

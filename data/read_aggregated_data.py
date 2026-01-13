@@ -92,38 +92,34 @@ def read_stock_news(timestamp):
     
     return result
 
-def read_stock_news_v2(timestamp):
+import json
+from datetime import datetime, timezone
+
+def read_stock_news_v2(
+    cutoff_date_str: str,
+    max_items: int = 100,
+):
     """
-    Read the last NEWS_COUNT news articles before the given timestamp for each ticker.
-    
-    Parameters:
-    timestamp (str or int): The timestamp (Unix timestamp or datetime string) to filter news articles.
-    
-    Returns:
-    dict: Dictionary with ticker symbols as keys and list of up to NEWS_COUNT news articles as values.
-          Articles are sorted by datetime in descending order (most recent first).
+    cutoff_date_str format: YYYY-MM-DD
     """
-    # Convert timestamp string to Unix timestamp if needed
-    if isinstance(timestamp, str):
-        from datetime import datetime
-        dt = datetime.fromisoformat(timestamp.replace('-05:00', '').replace('-04:00', ''))
-        timestamp = int(dt.timestamp())
-    
-    with open(DATA_DIR / 'stock_news.json', 'r') as f:
-        all_news = json.load(f)
-    
-    result = {}
-    for ticker, articles in all_news.items():
-        # Filter articles before the given timestamp
-        filtered_articles = [
-            article for article in articles 
-            if article['datetime'] <= timestamp
-        ]
-        # Sort by datetime descending and take last NEWS_COUNT
-        filtered_articles.sort(key=lambda x: x['datetime'], reverse=True)
-        result[ticker] = filtered_articles[:NEWS_COUNT]
-    
-    return result
+    # Convert cutoff date to UNIX timestamp (start of that day, UTC)
+    cutoff_dt = datetime.strptime(cutoff_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    cutoff_ts = int(cutoff_dt.timestamp())
+    with open(DATA_DIR / 'stock_news.json', "r") as f:
+        data = json.load(f)
+
+    collected = []
+
+    for ticker, news_list in data.items():
+        for item in news_list:
+            if item.get("datetime", 0) < cutoff_ts:
+                collected.append(item)
+
+    # Sort by datetime descending (most recent first)
+    collected.sort(key=lambda x: x["datetime"], reverse=True)
+
+    # Return only the requested number
+    return collected[:max_items]
 
 
 if __name__ == "__main__":

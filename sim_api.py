@@ -1,6 +1,6 @@
 from modules.stock_info_lstm import CandleLSTM
 from modules.news_info_sllm import StockLLMAgent
-from data.read_aggregated_data import read_stock_values, read_stock_values_v2
+from data.read_aggregated_data import read_stock_values, read_stock_values_v2, read_stock_news_v2
 import fastapi
 
 LSTM_CHECKPOINT_PATH = "/teamspace/studios/this_studio/TraderAgent/checkpoints/lstm-epoch=29-val_loss=0.1344.ckpt"
@@ -47,6 +47,10 @@ def startup_event():
     llm_agent = load_news_model()
     print("Classification model loaded successfully.")
 
+    global dates_list
+    with open("/teamspace/studios/this_studio/TraderAgent/data/dates.txt", "r") as f:
+        dates_list = [line.strip() for line in f if line.strip()]
+
 
 @app.get("/valuepredict")
 def value_predict():
@@ -54,7 +58,15 @@ def value_predict():
         return {"error": "Model not loaded yet."}
 
     global step
-    stock_values = read_stock_values_v2(step)
+    #NOTE: step - inseamna a cata zi ii - adica indexul pentru datele din stock_values.json
+    #NOTE: este un fisier dates.txt si de acolo se ia ziua curenta - ACTUALLY FUCK IT...
+
+    print(f"Current step...{step}")
+    # de aici luam date-ul curent...- dar sub forma unui index 
+    # with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "r") as f:
+        # step = int(f.read().strip())
+
+    stock_values = read_stock_values(step)       # -12
     predictions = {}
     current = {}
 
@@ -99,7 +111,7 @@ def value_predict():
         }
 
     current = {ticker: bars[-1] for ticker, bars in stock_values.items() if bars is not None and len(bars) > 0}
-    print(current)
+    # print(current)
     # current = {ticker: bars[-1] for ticker, bars in stock_values.items()}
     
     step += 1
@@ -110,7 +122,7 @@ def value_predict():
 
 
 @app.get("/analyzenews")
-def analyze_stock(news: str):
+def analyze_stock():
     """
     Endpoint to classify or analyze stock news via LLM.
     
@@ -123,6 +135,17 @@ def analyze_stock(news: str):
     if llm_agent is None:
         return {"error": "LLM agent not loaded yet."}
 
+    with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "r") as f:
+        step = int(f.read().strip())
+
+    global dates_list
+    print(dates_list[step])
+
+    stock_news = read_stock_news_v2(dates_list[step])
+    # print(stock_news)
+    return {"response": stock_news}
+
+    #TODO: Here the logic should be implemented
     
     
     response = llm_agent.run(news)
