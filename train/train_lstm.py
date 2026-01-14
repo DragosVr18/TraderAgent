@@ -105,7 +105,7 @@ def train_lstm(
     
     # Setup callbacks
     checkpoint_callback = ModelCheckpoint(
-        dirpath='checkpoints',
+        dirpath='checkpoints_lstm_1d',
         filename='lstm-{epoch:02d}-{val_loss:.4f}',
         monitor='val_loss',
         mode='min',
@@ -228,12 +228,12 @@ if __name__ == "__main__":
         'num_layers': 4,
         'dropout': 0.2,
         'lr': 0.0001,
-        'max_epochs': 30,
+        'max_epochs': 50,
         'normalization_method': 'percentage',
         'num_workers': 4,
         'accelerator': 'auto',
         'devices': 'auto',
-        'json_path': 'data_aggregated_v3/stock_values.json',
+        'json_path': 'data_aggregated_train/stock_values_all.json',
         'stock_symbols': None, #['AAPL', 'NVDA', 'AMZN', 'GOOGL', 'MSFT'],  # or None for all
         'train_split': 0.8
     }

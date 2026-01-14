@@ -124,7 +124,7 @@ def value_predict():
 
 
 @app.get("/analyzenews")
-def analyze_stock():
+def analyze_news():
     """
     Endpoint to classify or analyze stock news via LLM.
     

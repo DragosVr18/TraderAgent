@@ -50,7 +50,7 @@ class TradingAgent:
         self.fetch_news = True
         self.portfolio_file = None
         self.trade_history = []
-        
+        self.news_sentiments = {}
         # Build the agent graph
         self._build_graph()
 
@@ -64,24 +64,55 @@ class TradingAgent:
         Returns:
             str: Sentiment analysis result or error message
         """
+        # print("--------USING NEWS SENTIMENT TOOL--------")
+        # print("--------USING NEWS SENTIMENT TOOL--------")
         if self.fetch_news:
             try:
-                response = requests.get(f"{self.news_sentiment_endpoint}")
+                response = requests.get(
+                    self.news_sentiment_endpoint,
+                    params={"ticker": ticker}
+                )
+
                 if response.status_code == 200:
                     data = response.json()
-                    sentiment = data.get("sentiment", "No sentiment data available.")
-                    self.sentiments = data.get("sentiments", {})
-                    return f"News sentiment for {ticker}: {sentiment}"
+                    print(data)
+
+                    # print("--------NEWS SENTIMENT RESPONSE DATA--------")
+                    # print(data)
+
+                    # NEW FORMAT:
+                    # {
+                    #   "response": {
+                    #       "AAPL": "LLM sentiment text...",
+                    #       ...
+                    #   }
+                    # }
+
+                    if isinstance(data, dict) and "response" in data:
+                        print("HERE SOMETHING WRONG")
+                        self.news_sentiments.update(data["response"])
+                    else:
+                        return "Unexpected news sentiment API response format"
+
+                    self.fetch_news = False
                 else:
                     return f"Error fetching news sentiment: {response.status_code}"
+
             except Exception as e:
-                return f"Error connecting to news API: {str(e)}"
-
-        if ticker in self.sentiments:
-            sentiment = self.sentiments[ticker]
+                return f"Error connecting to news sentiment API: {str(e)}"
 
 
-            #NOTE: Aici de facut modificarile in continuare...
+        sentiment_data = self.news_sentiments.get(ticker)
+
+        print("--------NEWS SENTIMENT DATA--------")
+        # print(sentiment_data)
+
+        if not sentiment_data:
+            return f"No sentiment data available for ticker: {ticker}"
+
+        # sentiment_data is now already a final LLM-generated summary
+        return f"News sentiment for {ticker}:\n{sentiment_data}"
+
     
     def _stock_value_prediction_tool(self, ticker: str) -> str:
         """
@@ -92,6 +123,7 @@ class TradingAgent:
         Returns:
             str: Predicted candle values or error message
         """
+        print("--------USING VALUE PREDICTION TOOL--------")
         if self.fetch_values:
             try:
                 response = requests.get(self.stock_values_endpoint)
@@ -171,7 +203,7 @@ class TradingAgent:
     
     def _parse_tool_call(self, text: str):
         """Parse tool calls from LLM text response using ReAct-style format."""
-        tool_pattern = r'(stock_value_prediction|update_portolio)\s*\(\s*["\']([^"\']+)["\']\s*(?:,\s*["\']([^"\']+)["\']\s*)?(?:,\s*(\d+)\s*)?\)'
+        tool_pattern = r'(stock_value_prediction|news_sentiment|update_portolio)\s*\(\s*["\']([^"\']+)["\']\s*(?:,\s*["\']([^"\']+)["\']\s*)?(?:,\s*(\d+)\s*)?\)'
         matches = re.findall(tool_pattern, text)
         return matches
     
@@ -184,22 +216,45 @@ class TradingAgent:
         response = self.llm.invoke(state["messages"])
         
         tool_calls = self._parse_tool_call(response.content)
-        prediction_calls = [(name, arg1, arg2, arg3) for name, arg1, arg2, arg3 in tool_calls 
-                            if name == "stock_value_prediction"]
-        
-        if prediction_calls:
-            results = []
-            for tool_name, ticker, _, _ in prediction_calls:
-                result = self._stock_value_prediction_tool(ticker)
-                results.append(f"[{ticker}] {result}")
-            
+       
+        price_calls = [
+        (name, ticker)
+        for name, ticker, _, _ in tool_calls
+        if name == "stock_value_prediction"
+        ]
+
+        news_calls = [
+        (name, ticker)
+        for name, ticker, _, _ in tool_calls
+        if name == "news_sentiment"
+        ]
+
+        results = []
+
+        #Predictii preturi
+        for _, ticker in price_calls:
+            result = self._stock_value_prediction_tool(ticker)
+            results.append(f"[{ticker}] {result}")
+
+        #Sentiment din stiri
+        for _, ticker in news_calls:
+            result = self._news_sentiment_tool(ticker)
+            results.append(f"[{ticker}] {result}")
+
+        #Daca s-au executat tool calls, adaugam rezultatele
+        if results:
             combined_results = "\n".join(results)
             return {
-                "messages": [response, AIMessage(content=f"Tool Results:\n{combined_results}")],
+                "messages": [
+                    response,
+                    AIMessage(content=f"Tool Results:\n{combined_results}")
+                ],
                 "phase": "decide"
-            }
-        
-        return {"messages": [response], "phase": "decide"}
+        }
+
+        return {"messages": [response], "phase": "predict"}   #decide?
+
+
     
     def _decide_node(self, state: Dict) -> Dict:
         """Phase 2: Agent analyzes predictions and decides on trades."""
@@ -330,7 +385,11 @@ Write the actual tool calls now:""")
         stocks_list = list(portfolio.get('stocks', {}).keys())
         
         # Create tool call examples
-        tool_examples = "\n".join([f'stock_value_prediction("{ticker}")' for ticker in stocks_list])
+        tool_examples = "\n".join([
+            f'stock_value_prediction("{ticker}")\nnews_sentiment("{ticker}")'
+            for ticker in stocks_list
+        ])
+
         
         # Add strategy to system prompt
         strategy_prompt = f"\n\nTrading Strategy: {strategy}\nYou must follow this strategy when making trading decisions."
@@ -339,7 +398,11 @@ Write the actual tool calls now:""")
 
 You must analyze ALL these stocks: {stocks_list}
 
-Call the stock_value_prediction tool for each ticker like this:
+For EACH ticker, you MUST call BOTH tools in Phase 1:
+- stock_value_prediction("TICKER")
+- news_sentiment("TICKER")
+
+Call them exactly like in the examples below:
 {tool_examples}
 
 Do this now."""

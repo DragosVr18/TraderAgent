@@ -136,7 +136,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
     """
     try:
         # Progress tracking
-        yield pd.DataFrame(), "", "⏳ Setting up portfolio...", ""
+        yield pd.DataFrame(), "", "⏳ Setting up portfolio..."
         
         # Determine portfolio source
         if json_file is not None:
@@ -145,7 +145,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
             stocks = portfolio.get("stocks", {})
         else:
             if not budget or budget <= 0:
-                yield pd.DataFrame(), "", "❌ Error: Please provide a valid budget.", ""
+                yield pd.DataFrame(), "", "❌ Error: Please provide a valid budget."
                 return
             
             stocks = {}
@@ -160,14 +160,14 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
                         continue
             
             if not stocks:
-                yield pd.DataFrame(), "", "❌ Error: Please provide at least one stock holding.", ""
+                yield pd.DataFrame(), "", "❌ Error: Please provide at least one stock holding."
                 return
             
             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
             temp_file.close()
             agent.setup_portfolio(budget, stocks, temp_file.name)
         
-        yield pd.DataFrame(), "", f"✅ Portfolio setup complete! Starting {num_iterations} iteration(s)...", ""
+        yield pd.DataFrame(), "", f"✅ Portfolio setup complete! Starting {num_iterations} iteration(s)..."
         
         # Run iterations with live updates
         all_results = []
@@ -268,9 +268,8 @@ Do this now."""
 """
             
             progress_text = f"⏳ Iteration {i}/{num_iterations} complete. {total_trades} trade(s) so far..."
-            status = ""
-            
-            yield trade_history_df, summary, progress_text, status
+
+            yield trade_history_df, summary, progress_text
         
         # Final update
         trade_history_df = format_trade_history(all_results)
@@ -301,10 +300,10 @@ Do this now."""
 {format_portfolio_comparison(initial_portfolio, final_portfolio, initial_stock_prices, agent.stock_current)}
 """
         
-        yield trade_history_df, summary, "✅ Trading completed successfully!", ""
+        yield trade_history_df, summary, "✅ Trading completed successfully!"
         
     except Exception as e:
-        yield pd.DataFrame(), "", f"❌ Trading failed: {str(e)}", ""
+        yield pd.DataFrame(), "", f"❌ Trading failed: {str(e)}"
 
 def load_json_preview(json_file):
     """Preview uploaded JSON file."""
@@ -366,7 +365,7 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
                     headers=["Ticker", "Quantity"],
                     datatype=["str", "number"],
                     row_count=3,
-                    col_count=(2, "fixed"),
+                    column_count=(2, "fixed"),
                     value=create_default_stocks(),
                     label="Enter your stocks",
                     interactive=True
