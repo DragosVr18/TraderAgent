@@ -172,65 +172,32 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         # Run iterations with live updates
         all_results = []
         initial_portfolio = None
-        initial_stock_prices = None  # Will be captured on first iteration
+        initial_stock_prices = None
         initial_summary_shown = False
         
         for i in range(1, num_iterations + 1):
+            # Update date file (simulating progression)
             with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "w") as date_file:
                 date_file.write(f"{i+15}\n")
             
-            # Run single iteration
-            agent.fetch_values = True
-            agent.trade_history = []
-            
-            with open(agent.portfolio_file, 'r') as file:
-                portfolio = json.load(file)
-            
+            # Store initial portfolio on first iteration
             if initial_portfolio is None:
-                initial_portfolio = portfolio.copy()
+                with open(agent.portfolio_file, 'r') as file:
+                    initial_portfolio = json.load(file)
             
-            stocks_list = list(portfolio.get('stocks', {}).keys())
-            tool_examples = "\n".join([f'stock_value_prediction("{ticker}")' for ticker in stocks_list])
+            # ===== CHANGED: Use agent's run_iteration method =====
+            result = agent.run_iteration(strategy)
+            # ======================================================
             
-            user_prompt = f"""Current Portfolio: {portfolio}
-
-You must analyze ALL these stocks: {stocks_list}
-
-Call the stock_value_prediction tool for each ticker like this:
-{tool_examples}
-
-Do this now."""
+            result["iteration"] = i
+            all_results.append(result)
             
-            from langchain_core.messages import SystemMessage, HumanMessage
-            from config.config_reader import get_parameterized_system_prompt
-
-            SYSTEM_PROMPT = get_parameterized_system_prompt(strategy)
-            
-            initial_state = {
-                "messages": [
-                    SystemMessage(content=SYSTEM_PROMPT),
-                    HumanMessage(content=user_prompt),
-                ],
-                "phase": "predict"
-            }
-            
-            final_state = agent.agent_graph.invoke(initial_state, config={"recursion_limit": 10})
-            
-            # Capture initial stock prices from first iteration (after agent fetches them)
+            # Capture initial stock prices from first iteration
             if initial_stock_prices is None:
                 initial_stock_prices = agent.stock_current.copy()
             
-            with open(agent.portfolio_file, 'r') as file:
-                final_portfolio = json.load(file)
-            
-            result = {
-                "trade_history": agent.trade_history,
-                "initial_portfolio": portfolio,
-                "final_portfolio": final_portfolio,
-                "messages": final_state["messages"],
-                "iteration": i
-            }
-            all_results.append(result)
+            # Get final portfolio from result
+            final_portfolio = result["final_portfolio"]
             
             # Show initial portfolio value before first iteration
             if not initial_summary_shown:
