@@ -22,8 +22,7 @@ def format_trade_history(results):
                 "Action": trade["action"].upper(),
                 "Quantity": trade["quantity"],
                 "Price": f"${trade['price']:.2f}",
-                "Total": f"${trade['total']:.2f}",
-                "Details": trade["message"]
+                "Total": f"${trade['total']:.2f}"
             })
     
     if not all_trades:
@@ -106,16 +105,14 @@ def format_portfolio_comparison(initial, final, initial_stock_prices, final_stoc
     comparison += "---\n\n"
     
     comparison += "#### Stock Holdings\n\n"
-    comparison += "| Ticker | Initial Qty | Final Qty | Qty Change | Initial Price | Final Price | Value Change |\n"
-    comparison += "|--------|-------------|-----------|------------|---------------|-------------|-------------|\n"
+    comparison += "| Ticker | Initial Qty | Final Qty | Initial Price | Final Price | Value Change |\n"
+    comparison += "|--------|-------------|-----------|---------------|-------------|-------------|\n"
     
     all_tickers = set(list(initial.get('stocks', {}).keys()) + list(final.get('stocks', {}).keys()))
     
     for ticker in sorted(all_tickers):
         init_qty = initial.get('stocks', {}).get(ticker, 0)
         final_qty = final.get('stocks', {}).get(ticker, 0)
-        qty_change = final_qty - init_qty
-        qty_change_str = f"+{qty_change}" if qty_change > 0 else str(qty_change)
         
         init_price = initial_stock_prices.get(ticker, {}).get('Close', 0)
         final_price = final_stock_prices.get(ticker, {}).get('Close', 0)
@@ -126,7 +123,7 @@ def format_portfolio_comparison(initial, final, initial_stock_prices, final_stoc
         value_change = final_value - init_value
         value_change_str = f"+${value_change:.2f}" if value_change >= 0 else f"-${abs(value_change):,.2f}"
         
-        comparison += f"| {ticker} | {init_qty} | {final_qty} | {qty_change_str} | ${init_price:.2f} | ${final_price:.2f} | {value_change_str} |\n"
+        comparison += f"| {ticker} | {init_qty} | {final_qty} | ${init_price:.2f} | ${final_price:.2f} | {value_change_str} |\n"
     
     return comparison
 
@@ -185,9 +182,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
                 with open(agent.portfolio_file, 'r') as file:
                     initial_portfolio = json.load(file)
             
-            # ===== CHANGED: Use agent's run_iteration method =====
             result = agent.run_iteration(strategy)
-            # ======================================================
             
             result["iteration"] = i
             all_results.append(result)
@@ -366,9 +361,7 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
                 choices=[
                     "High Risk - Aggressive Growth",
                     "Medium Risk - Balanced",
-                    "Low Risk - Long Term Conservative",
-                    "Day Trading - Quick Profits",
-                    "Value Investing - Undervalued Stocks"
+                    "Low Risk - Long Term Conservative"
                 ],
                 value="Medium Risk - Balanced",
                 info="Select your preferred trading strategy"
@@ -385,15 +378,6 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
             
             run_button = gr.Button("🚀 Start Trading", variant="primary", size="lg")
             
-            # NEW: Dedicated progress display
-            # progress_output = gr.Textbox(
-            #     label="Progress",
-            #     lines=2,
-            #     max_lines=3,
-            #     interactive=False,
-            #     show_label=True
-            # )
-            
             status_output = gr.Markdown("")
         
         with gr.Column(scale=2):
@@ -403,9 +387,8 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
             
             trade_history_output = gr.Dataframe(
                 label="Trade History (Live Updates)",
-                headers=["Iteration", "Ticker", "Action", "Quantity", "Price", "Total", "Details"],
-                wrap=True,
-                # visible=False  # Start hidden
+                headers=["Iteration", "Ticker", "Action", "Quantity", "Price", "Total"],
+                wrap=True
             )
     
     # Connect the run button with streaming output
@@ -421,10 +404,8 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
         outputs=[
             trade_history_output,
             summary_output,
-            # progress_output,  # NEW: Added progress output
             status_output
-        ],
-        # show_progress="hidden"  # CHANGED: Hide the floating progress bar completely
+        ]
     )
     
     gr.Markdown("""
@@ -454,5 +435,4 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
     """)
 
 if __name__ == "__main__":
-    # app.queue()
     app.launch(share=False, server_name="0.0.0.0", server_port=7860)
