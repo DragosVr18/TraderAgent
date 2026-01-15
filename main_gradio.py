@@ -166,16 +166,40 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         
         yield gr.update(visible=False), """<div align="center">
 
-<h3> 🧠 AI Agent Initializing </h3>
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+</style>
 
-📊 Analyzing market conditions...  <br>
-📰 Gathering latest news and sentiment data...  <br>
-🔍 Evaluating portfolio holdings...  <br>
-⚙️ Preparing trading strategy... <br>
+<h3>🤖 AI Agent Initializing</h3>
+<p>
+📊 Analyzing market conditions...<br>
+📰 Gathering latest news and sentiment data...<br>
+🔍 Evaluating portfolio holdings...<br>
+⚙️ Preparing trading strategy...<br>
 ⏳ Starting first iteration...
+</p>
+
+
+<img src="https://media1.tenor.com/m/4y21cGULStEAAAAd/meme-crypto.gif" width="400" alt="Loading..."/>
+
+
 
 </div>""", f"⏳ Starting {num_iterations} iteration(s)..."
         
+
+        # <div class="spinner"></div>
         # Run iterations with live updates
         all_results = []
         initial_portfolio = None
