@@ -3,7 +3,7 @@ import numpy as np
 import json
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / 'data_aggregated_v3'
+DATA_DIR = Path(__file__).parent.parent / 'data_aggregated_v4'
 NEWS_COUNT = 3
 BAR_COUNT = 12
 
@@ -24,6 +24,32 @@ def read_stock_values(step):
     result = {}
     for ticker, bars in all_data.items():
         start_idx = step * BAR_COUNT
+        end_idx = start_idx + BAR_COUNT
+        
+        if start_idx < len(bars):
+            result[ticker] = bars[start_idx:end_idx]
+        else:
+            result[ticker] = None  # No more data available
+    
+    return result
+
+def read_stock_values_v2(step):
+    """
+    Read the next BAR_COUNT bars for each ticker starting from the given step.
+    
+    Parameters:
+    step (int): The starting index (0-based) for reading bars.
+    
+    Returns:
+    dict: Dictionary with ticker symbols as keys and list of 4 bars as values.
+          Returns None for tickers that don't have enough data.
+    """
+    with open(DATA_DIR / 'stock_values.json', 'r') as f:
+        all_data = json.load(f)
+    
+    result = {}
+    for ticker, bars in all_data.items():
+        start_idx = step
         end_idx = start_idx + BAR_COUNT
         
         if start_idx < len(bars):
@@ -64,6 +90,41 @@ def read_stock_news(timestamp):
         filtered_articles.sort(key=lambda x: x['datetime'], reverse=True)
         result[ticker] = filtered_articles[:NEWS_COUNT]
     
+    return result
+
+import json
+from datetime import datetime, timezone
+
+def read_stock_news_v2(
+    cutoff_date_str: str,
+    max_items: int = 3,
+):
+    """
+    cutoff_date_str format: YYYY-MM-DD
+    """
+    # Convert cutoff date to UNIX timestamp (start of that day, UTC)
+    cutoff_dt = datetime.strptime(cutoff_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    cutoff_ts = int(cutoff_dt.timestamp())
+    with open(DATA_DIR / 'stock_news.json', "r") as f:
+        data = json.load(f)
+
+    collected = []
+
+    result = {}
+
+    for ticker, news_list in data.items():
+        # Filter items before the cutoff
+        filtered = [
+            item for item in news_list
+            if item.get("datetime", 0) < cutoff_ts
+        ]
+
+        # Sort by datetime descending (most recent first)
+        filtered.sort(key=lambda x: x.get("datetime", 0), reverse=True)
+
+        # Keep only the requested number
+        result[ticker] = filtered[:max_items]
+
     return result
 
 

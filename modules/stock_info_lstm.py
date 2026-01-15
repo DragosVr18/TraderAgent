@@ -57,7 +57,7 @@ class CandleLSTM(pl.LightningModule):
             print(f"  y stats: min={y.min():.2f}, max={y.max():.2f}, mean={y.mean():.2f}")
             return None
         
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=32)
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -70,11 +70,11 @@ class CandleLSTM(pl.LightningModule):
             print(f"WARNING: Invalid validation loss detected at batch {batch_idx}")
             return None
         
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, batch_size=32)
         
         # Log additional metrics
         mae = nn.functional.l1_loss(y_pred, y)
-        self.log('val_mae', mae, on_step=False, on_epoch=True)
+        self.log('val_mae', mae, on_step=False, on_epoch=True, batch_size=32)
         
         return loss
     

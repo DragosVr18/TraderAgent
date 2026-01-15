@@ -1,5 +1,6 @@
 from modules.stock_info_lstm import CandleLSTM
-from data.read_aggregated_data import read_stock_values
+from modules.news_info_sllm import StockLLMAgent
+from data.read_aggregated_data import read_stock_values, read_stock_values_v2, read_stock_news_v2
 import fastapi
 
 LSTM_CHECKPOINT_PATH = "/teamspace/studios/this_studio/TraderAgent/checkpoints/lstm-epoch=29-val_loss=0.1344.ckpt"
@@ -20,9 +21,21 @@ def load_candle_model(checkpoint_filepath, device='cpu'):
     model.eval()
     return model
 
+def load_news_model():
+    llm_agent = StockLLMAgent(
+        model_name="llama3.2:3b",
+        base_url="http://localhost:11434/v1",
+        api_key="ollama",
+        prompt_yaml_path="/teamspace/studios/this_studio/TraderAgent/config/config_class.yaml",
+        temperature=0.0,
+    )
+    print("Stock LLM agent loaded successfully.")
+    return llm_agent
+
 app = fastapi.FastAPI()
 model = None
 step = 0
+
 
 @app.on_event("startup")
 def startup_event():
@@ -30,13 +43,30 @@ def startup_event():
     model = load_candle_model(LSTM_CHECKPOINT_PATH)
     print("CandleLSTM model loaded successfully.")
 
+    global llm_agent
+    llm_agent = load_news_model()
+    print("Classification model loaded successfully.")
+
+    global dates_list
+    with open("/teamspace/studios/this_studio/TraderAgent/data/dates.txt", "r") as f:
+        dates_list = [line.strip() for line in f if line.strip()]
+
+
 @app.get("/valuepredict")
 def value_predict():
     if model is None:
         return {"error": "Model not loaded yet."}
 
     global step
-    stock_values = read_stock_values(step)
+    #NOTE: step - inseamna a cata zi ii - adica indexul pentru datele din stock_values.json
+    #NOTE: este un fisier dates.txt si de acolo se ia ziua curenta - ACTUALLY FUCK IT...
+
+    print(f"Current step...{step}")
+    # de aici luam date-ul curent...- dar sub forma unui index 
+    # with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "r") as f:
+        # step = int(f.read().strip())
+
+    stock_values = read_stock_values(step)       # -12
     predictions = {}
     current = {}
 
@@ -81,9 +111,43 @@ def value_predict():
         }
 
     current = {ticker: bars[-1] for ticker, bars in stock_values.items() if bars is not None and len(bars) > 0}
+    # print(current)
+    # current = {ticker: bars[-1] for ticker, bars in stock_values.items()}
     
     step += 1
 
     result = {"predictions": predictions, "current": current}
 
     return result
+
+
+@app.get("/analyzenews")
+def analyze_stock():
+    """
+    Endpoint to classify or analyze stock news via LLM.
+    
+    Args:
+        news: Stock news text
+    
+    Returns:
+        LLM response text
+    """
+    if llm_agent is None:
+        return {"error": "LLM agent not loaded yet."}
+
+    with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "r") as f:
+        step = int(f.read().strip())
+
+    global dates_list
+    print(dates_list[step])
+
+    stock_news = read_stock_news_v2(dates_list[step])
+    # print(stock_news)
+    return {"response": stock_news}
+
+    #TODO: Here the logic should be implemented
+    
+    
+    response = llm_agent.run(news)
+    return {"response": response}
+
