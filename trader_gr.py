@@ -51,6 +51,8 @@ class TradingAgent:
         self.portfolio_file = None
         self.trade_history = []
         self.news_sentiments = {}
+        self.market_history = []  # Track historical market data
+        self.previous_predictions = {}  # Store predictions from previous iteration
         # Build the agent graph
         self._build_graph()
 
@@ -64,8 +66,6 @@ class TradingAgent:
         Returns:
             str: Sentiment analysis result or error message
         """
-        # print("--------USING NEWS SENTIMENT TOOL--------")
-        # print("--------USING NEWS SENTIMENT TOOL--------")
         if self.fetch_news:
             try:
                 response = requests.get(
@@ -75,21 +75,7 @@ class TradingAgent:
 
                 if response.status_code == 200:
                     data = response.json()
-                    print(data)
-
-                    # print("--------NEWS SENTIMENT RESPONSE DATA--------")
-                    # print(data)
-
-                    # NEW FORMAT:
-                    # {
-                    #   "response": {
-                    #       "AAPL": "LLM sentiment text...",
-                    #       ...
-                    #   }
-                    # }
-
                     if isinstance(data, dict) and "response" in data:
-                        print("HERE SOMETHING WRONG")
                         self.news_sentiments.update(data["response"])
                     else:
                         return "Unexpected news sentiment API response format"
@@ -104,13 +90,9 @@ class TradingAgent:
 
         sentiment_data = self.news_sentiments.get(ticker)
 
-        print("--------NEWS SENTIMENT DATA--------")
-        # print(sentiment_data)
-
         if not sentiment_data:
             return f"No sentiment data available for ticker: {ticker}"
 
-        # sentiment_data is now already a final LLM-generated summary
         return f"News sentiment for {ticker}:\n{sentiment_data}"
 
     
@@ -123,7 +105,6 @@ class TradingAgent:
         Returns:
             str: Predicted candle values or error message
         """
-        print("--------USING VALUE PREDICTION TOOL--------")
         if self.fetch_values:
             try:
                 response = requests.get(self.stock_values_endpoint)
@@ -141,9 +122,9 @@ class TradingAgent:
             prediction = self.stock_predictions[ticker]
             current = self.stock_current.get(ticker, {})
             return (f"Predicted values for {ticker} - Open: {prediction['Open']}, High: {prediction['High']}, "
-                    f"Low: {prediction['Low']}, Close: {prediction['Close']}, Volume: {prediction['Volume']}. "
+                    f"Low: {prediction['Low']}, Close: {prediction['Close']}. "
                     f"Current values - Open: {current.get('Open', 'N/A')}, High: {current.get('High', 'N/A')}, "
-                    f"Low: {current.get('Low', 'N/A')}, Close: {current.get('Close', 'N/A')}, Volume: {current.get('Volume', 'N/A')}.")
+                    f"Low: {current.get('Low', 'N/A')}, Close: {current.get('Close', 'N/A')}")
         else:
             return f"No prediction available for ticker: {ticker}"
     
@@ -190,17 +171,102 @@ class TradingAgent:
             json.dump(portfolio, file, indent=4)
         
         # Add to trade history
-        self.trade_history.append({
+        trade_record = {
             "ticker": ticker,
             "action": action,
             "quantity": quantity,
             "price": price_per_share,
             "total": total_price,
             "message": message
-        })
+        }
+        self.trade_history.append(trade_record)
         
         return message
+
+    def _record_market_event(self, ticker: str, action: str, quantity: int, 
+                            price: float, budget_after: float, holdings_after: int):
+        """
+        Record a market event to history.
+        
+        Args:
+            ticker: Stock ticker
+            action: buy/sell
+            quantity: Number of shares
+            price: Price per share
+            budget_after: Budget after trade
+            holdings_after: Holdings after trade
+        """
+        # Compare current actual values with PREVIOUS predictions
+        previous_pred = self.previous_predictions.get(ticker, {})
+        current_actual = self.stock_current.get(ticker, {})
+        
+        # Calculate prediction accuracy
+        predicted_close = previous_pred.get('Close')
+        actual_close = current_actual.get('Close')
+        prediction_error = None
+        prediction_accuracy_pct = None
+        
+        if predicted_close and actual_close:
+            prediction_error = actual_close - predicted_close
+            prediction_accuracy_pct = (1 - abs(prediction_error) / actual_close) * 100
+        
+        event = {
+            "ticker": ticker,
+            "action": action,
+            "quantity": quantity,
+            "trade_price": price,
+            "previous_predicted_close": predicted_close,
+            "actual_close": actual_close,
+            "prediction_error": prediction_error,
+            "prediction_accuracy_pct": prediction_accuracy_pct,
+            "budget_after": budget_after,
+            "holdings_after": holdings_after,
+            "sentiment": self.news_sentiments.get(ticker, "N/A")[:100] if self.news_sentiments.get(ticker) else "N/A"
+        }
+        
+        self.market_history.append(event)
     
+    def _format_market_history(self, max_events: int = 10) -> str:
+        """
+        Format market history for LLM consumption.
+        
+        Args:
+            max_events: Maximum number of recent events to include
+        
+        Returns:
+            str: Formatted market history
+        """
+        if not self.market_history:
+            return "No previous market history available."
+        
+        recent_history = self.market_history[-max_events:]
+        
+        formatted = "Recent Market History:\n"
+        for i, event in enumerate(recent_history, 1):
+            formatted += f"\n{i}. {event['ticker']} - {event['action'].upper()}\n"
+            formatted += f"   Qty: {event['quantity']}, Trade Price: ${event['trade_price']:.2f}\n"
+            
+            if event['previous_predicted_close'] and event['actual_close']:
+                formatted += f"   Previous Prediction: ${event['previous_predicted_close']:.2f}, Actual: ${event['actual_close']:.2f}\n"
+                if event['prediction_error'] is not None:
+                    formatted += f"   Prediction Error: ${event['prediction_error']:.2f}"
+                if event['prediction_accuracy_pct'] is not None:
+                    formatted += f" (Accuracy: {event['prediction_accuracy_pct']:.1f}%)\n"
+                else:
+                    formatted += "\n"
+            
+            formatted += f"   Holdings After: {event['holdings_after']}, Budget: ${event['budget_after']:.2f}\n"
+        
+        # Add summary statistics
+        if len(recent_history) > 0:
+            accuracies = [e['prediction_accuracy_pct'] for e in recent_history 
+                         if e['prediction_accuracy_pct'] is not None]
+            if accuracies:
+                avg_accuracy = sum(accuracies) / len(accuracies)
+                formatted += f"\nAverage Prediction Accuracy: {avg_accuracy:.1f}%\n"
+        
+        return formatted
+
     def _parse_tool_call(self, text: str):
         """Parse tool calls from LLM text response using ReAct-style format."""
         tool_pattern = r'(stock_value_prediction|news_sentiment|update_portolio)\s*\(\s*["\']([^"\']+)["\']\s*(?:,\s*["\']([^"\']+)["\']\s*)?(?:,\s*(\d+)\s*)?\)'
@@ -390,11 +456,15 @@ Write the actual tool calls now:""")
             for ticker in stocks_list
         ])
 
+        # Format market history
+        history_context = self._format_market_history(max_events=10)
         
         # Add strategy to system prompt
         strategy_prompt = f"\n\nTrading Strategy: {strategy}\nYou must follow this strategy when making trading decisions."
         
         user_prompt = f"""Current Portfolio: {portfolio}
+
+{history_context}
 
 You must analyze ALL these stocks: {stocks_list}
 
@@ -417,15 +487,38 @@ Do this now."""
         
         final_state = self.agent_graph.invoke(initial_state, config={"recursion_limit": 10})
         
+        # Record market events AFTER getting new predictions but BEFORE updating previous_predictions
+        # This ensures we compare current actuals with previous predictions
+        for ticker in stocks_list:
+            for trade in self.trade_history:
+                if trade['ticker'] == ticker:
+                    self._record_market_event(
+                        ticker=trade['ticker'],
+                        action=trade['action'],
+                        quantity=trade['quantity'],
+                        price=trade['price'],
+                        budget_after=0,  # Will be updated from portfolio
+                        holdings_after=0  # Will be updated from portfolio
+                    )
+        
         # Load final portfolio state
         with open(self.portfolio_file, 'r') as file:
             final_portfolio = json.load(file)
+        
+        # Update market history with correct budget/holdings
+        for event in self.market_history[-len(self.trade_history):]:
+            event['budget_after'] = final_portfolio['budget']
+            event['holdings_after'] = final_portfolio['stocks'].get(event['ticker'], 0)
+        
+        # Store current predictions for next iteration comparison
+        self.previous_predictions = self.stock_predictions.copy()
         
         return {
             "trade_history": self.trade_history,
             "initial_portfolio": portfolio,
             "final_portfolio": final_portfolio,
-            "messages": final_state["messages"]
+            "messages": final_state["messages"],
+            "market_history_snapshot": list(self.market_history)
         }
     
     def run_multiple_iterations(self, num_iterations: int, strategy: str, progress_callback=None):

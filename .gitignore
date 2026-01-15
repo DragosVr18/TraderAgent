@@ -4,3 +4,5 @@
 
 __pycache__/
 checkpoints_lstm_1d/
+checkpoints_*/
+test_results/

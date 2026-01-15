@@ -177,7 +177,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         
         for i in range(1, num_iterations + 1):
             with open("/teamspace/studios/this_studio/TraderAgent/data/current_date.txt", "w") as date_file:
-                date_file.write(f"{i+30}\n")
+                date_file.write(f"{i+15}\n")
             
             # Run single iteration
             agent.fetch_values = True
@@ -337,7 +337,7 @@ def create_default_stocks():
     """Create default stocks dataframe."""
     return pd.DataFrame({
         "Ticker": ["AAPL", "MSFT", "GOOGL", "NFLX", "ORCL"],
-        "Quantity": [0.56, 1.45, 2.0, 0.52, 1.34]
+        "Quantity": [2, 6, 2, 3, 4]
     })
 
 # Create Gradio interface

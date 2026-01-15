@@ -91,7 +91,7 @@ def train_lstm(
     
     # Initialize model
     model = CandleLSTM(
-        input_size=5,  # OHLCV
+        input_size=4,  # OHLCV
         hidden_size=hidden_size,
         num_layers=num_layers,
         dropout=dropout,
@@ -105,7 +105,7 @@ def train_lstm(
     
     # Setup callbacks
     checkpoint_callback = ModelCheckpoint(
-        dirpath='checkpoints_lstm_1d',
+        dirpath='checkpoints_lstm_1d_4layers_256hidden',
         filename='lstm-{epoch:02d}-{val_loss:.4f}',
         monitor='val_loss',
         mode='min',
@@ -206,16 +206,16 @@ def test_model(checkpoint_path, dataloader, num_samples=5, device='cpu'):
         
         print(f"Sample {i+1}:")
         print(f"  True:      O={y_true_denorm[0]:.2f} H={y_true_denorm[1]:.2f} "
-              f"L={y_true_denorm[2]:.2f} C={y_true_denorm[3]:.2f} V={y_true_denorm[4]:.0f}")
+              f"L={y_true_denorm[2]:.2f} C={y_true_denorm[3]:.2f}")
         print(f"  Predicted: O={y_pred_denorm[0]:.2f} H={y_pred_denorm[1]:.2f} "
-              f"L={y_pred_denorm[2]:.2f} C={y_pred_denorm[3]:.2f} V={y_pred_denorm[4]:.0f}")
+              f"L={y_pred_denorm[2]:.2f} C={y_pred_denorm[3]:.2f}")
         
         # Calculate errors
         errors = abs(y_true_denorm - y_pred_denorm)
         pct_errors = (errors / (abs(y_true_denorm) + 1e-8)) * 100
         
         print(f"  Error %:   O={pct_errors[0]:.2f}% H={pct_errors[1]:.2f}% "
-              f"L={pct_errors[2]:.2f}% C={pct_errors[3]:.2f}% V={pct_errors[4]:.2f}%")
+              f"L={pct_errors[2]:.2f}% C={pct_errors[3]:.2f}%")
         print()
 
 
@@ -224,9 +224,9 @@ if __name__ == "__main__":
     config = {
         'sequence_length': 12,        
         'batch_size': 32,
-        'hidden_size': 128,
+        'hidden_size': 256,
         'num_layers': 4,
-        'dropout': 0.2,
+        'dropout': 0.3,
         'lr': 0.0001,
         'max_epochs': 50,
         'normalization_method': 'percentage',
@@ -249,9 +249,16 @@ if __name__ == "__main__":
         test_model(
             checkpoint_path=trainer.checkpoint_callback.best_model_path,
             dataloader=dataloader,
-            num_samples=10,
+            num_samples=20,
             device=test_device
         )
+
+    # test_model(
+    #     checkpoint_path="/teamspace/studios/this_studio/TraderAgent/checkpoints_lstm_1d_16seq/lstm-epoch=25-val_loss=7.3272.ckpt",
+    #     dataloader=dataloader,
+    #     num_samples=20,
+    #     device=test_device
+    # )
     
     print("\n" + "="*80)
     print("Done!")

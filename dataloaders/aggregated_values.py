@@ -45,7 +45,7 @@ class StockValuesDataset(Dataset):
                     candle.get('High', 0),
                     candle.get('Low', 0),
                     candle.get('Close', 0),
-                    candle.get('Volume', 0)
+                    # candle.get('Volume', 0)
                 ]
                 ohlcv_data.append(ohlcv)
             
@@ -83,7 +83,7 @@ class StockValuesDataset(Dataset):
             normalized[..., :4] = (data[..., :4] - base_values[:4]) / (base_values[:4] + 1e-8) * 100
             
             # Volume normalization - use log scale to prevent explosion
-            normalized[..., 4] = np.log1p(data[..., 4]) - np.log1p(base_values[4])
+            # normalized[..., 4] = np.log1p(data[..., 4]) - np.log1p(base_values[4])
             
             return normalized
         else:
@@ -108,7 +108,7 @@ class StockValuesDataset(Dataset):
             denormalized[..., :4] = (data[..., :4] / 100) * base_values[:4] + base_values[:4]
             
             # Volume denormalization - reverse log scale
-            denormalized[..., 4] = np.expm1(data[..., 4] + np.log1p(base_values[4]))
+            # denormalized[..., 4] = np.expm1(data[..., 4] + np.log1p(base_values[4]))
             
             return denormalized
         else:
@@ -234,7 +234,8 @@ class StockValuesDataLoader:
             num_workers=num_workers,
             pin_memory=True,
             persistent_workers=True if num_workers > 0 else False,
-            collate_fn=self.collate_fn
+            collate_fn=self.collate_fn,
+            drop_last=True
         )
         
         val_loader = DataLoader(
@@ -244,7 +245,8 @@ class StockValuesDataLoader:
             num_workers=num_workers,
             pin_memory=True,
             persistent_workers=True if num_workers > 0 else False,
-            collate_fn=self.collate_fn
+            collate_fn=self.collate_fn,
+            drop_last=True,
         )
         
         return train_loader, val_loader

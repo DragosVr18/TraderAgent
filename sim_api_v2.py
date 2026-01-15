@@ -3,7 +3,7 @@ from modules.news_info_sllm import StockLLMAgent
 from data.read_aggregated_data import read_stock_values, read_stock_values_v2, read_stock_news_v2
 import fastapi
 
-LSTM_CHECKPOINT_PATH = "/teamspace/studios/this_studio/TraderAgent/checkpoints/lstm-epoch=29-val_loss=0.1344.ckpt"
+LSTM_CHECKPOINT_PATH = "/teamspace/studios/this_studio/TraderAgent/checkpoints_lstm_1d_new/lstm-epoch=41-val_loss=5.8547.ckpt"
 
 def load_candle_model(checkpoint_filepath, device='cpu'):
     """
@@ -81,13 +81,13 @@ def value_predict():
         import torch
         import numpy as np
 
-        input_data = np.array([[bar['Open'], bar['High'], bar['Low'], bar['Close'], bar['Volume']] for bar in bars])
+        input_data = np.array([[bar['Open'], bar['High'], bar['Low'], bar['Close']] for bar in bars])
 
         # Normalize input
         base_values = input_data[0]
         normalized = input_data.copy()
         normalized[:, :4] = (normalized[:, :4] - base_values[:4]) / (base_values[:4] + 1e-8) * 100
-        normalized[:, 4] = np.log1p(normalized[:, 4]) - np.log1p(base_values[4])
+        # normalized[:, 4] = np.log1p(normalized[:, 4]) - np.log1p(base_values[4])
 
         input_tensor = torch.tensor(normalized, dtype=torch.float32).unsqueeze(0)  # Shape: (1, seq_len, features)
         input_tensor = input_tensor.to(next(model.parameters()).device)
@@ -100,7 +100,7 @@ def value_predict():
         pred_array = pred_tensor.cpu().numpy()[0]
         denorm_pred = pred_array.copy()
         denorm_pred[:4] = (denorm_pred[:4] / 100) * (base_values[:4] + 1e-8) + base_values[:4]
-        denorm_pred[4] = np.expm1(denorm_pred[4] + np.log1p(base_values[4]))
+        # denorm_pred[4] = np.expm1(denorm_pred[4] + np.log1p(base_values[4]))
 
         #print("All good so far")
 
@@ -109,7 +109,7 @@ def value_predict():
             'High': float(denorm_pred[1]),
             'Low': float(denorm_pred[2]),
             'Close': float(denorm_pred[3]),
-            'Volume': float(denorm_pred[4])
+            # 'Volume': float(denorm_pred[4])
         }
 
     current = {ticker: bars[-1] for ticker, bars in stock_values.items() if bars is not None and len(bars) > 0}
