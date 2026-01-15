@@ -132,8 +132,8 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
     Main function to run the trading agent with live updates.
     """
     try:
-        # Progress tracking
-        yield pd.DataFrame(), "", "⏳ Setting up portfolio..."
+        # Progress tracking with loading state - hide table initially
+        yield gr.update(visible=False), "", "⏳ Setting up portfolio..."
         
         # Determine portfolio source
         if json_file is not None:
@@ -142,7 +142,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
             stocks = portfolio.get("stocks", {})
         else:
             if not budget or budget <= 0:
-                yield pd.DataFrame(), "", "❌ Error: Please provide a valid budget."
+                yield gr.update(visible=False), "", "❌ Error: Please provide a valid budget."
                 return
             
             stocks = {}
@@ -157,14 +157,21 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
                         continue
             
             if not stocks:
-                yield pd.DataFrame(), "", "❌ Error: Please provide at least one stock holding."
+                yield gr.update(visible=False), "", "❌ Error: Please provide at least one stock holding."
                 return
             
             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
             temp_file.close()
             agent.setup_portfolio(budget, stocks, temp_file.name)
         
-        yield pd.DataFrame(), "", f"✅ Portfolio setup complete! Starting {num_iterations} iteration(s)..."
+        yield gr.update(visible=False), """## 🧠 AI Agent Initializing
+
+📊 Analyzing market conditions...  
+📰 Gathering latest news and sentiment data...  
+🔍 Evaluating portfolio holdings...  
+⚙️ Preparing trading strategy...
+
+""", f"⏳ Starting {num_iterations} iteration(s)..."
         
         # Run iterations with live updates
         all_results = []
@@ -231,7 +238,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
             
             progress_text = f"⏳ Iteration {i}/{num_iterations} complete. {total_trades} trade(s) so far..."
 
-            yield trade_history_df, summary, progress_text
+            yield gr.update(value=trade_history_df, visible=True), summary, progress_text
         
         # Final update
         trade_history_df = format_trade_history(all_results)
@@ -265,7 +272,7 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
         yield trade_history_df, summary, "✅ Trading completed successfully!"
         
     except Exception as e:
-        yield pd.DataFrame(), "", f"❌ Trading failed: {str(e)}"
+        yield gr.update(visible=False), "", f"❌ Trading failed: {str(e)}"
 
 def load_json_preview(json_file):
     """Preview uploaded JSON file."""
@@ -298,16 +305,19 @@ def add_stock_row(stocks_df):
 def create_default_stocks():
     """Create default stocks dataframe."""
     return pd.DataFrame({
-        "Ticker": ["AAPL", "MSFT", "GOOGL", "NFLX", "ORCL"],
-        "Quantity": [2, 6, 2, 3, 4]
+        "Ticker": ["AAPL", "MSFT", "GOOGL", "NFLX", "META", "TSLA", "AMZN"],
+        "Quantity": [2, 2, 3, 4, 1, 2, 3]
     })
 
 # Create Gradio interface
 with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
+
     gr.Markdown("""
-    # 🤖 Auto-Trading Agent
+    <div style="text-align: center;">
+    <h1> 🤖 Auto-Trading Agent </h1>
     
     Configure your portfolio and let the AI agent make trading decisions based on stock predictions.
+    </div>
     """)
     
     with gr.Row():
@@ -381,14 +391,48 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
             status_output = gr.Markdown("")
         
         with gr.Column(scale=2):
-            gr.Markdown("### Trading Results")
             
-            summary_output = gr.Markdown("")
+            summary_output = gr.Markdown("""
+### 🎯 How It Works
+
+**Step 1: Load Your Portfolio** 💼  
+Choose your style: manually enter your holdings or drop in a JSON file. Either way, make sure you've got some skin in the game!
+
+**Step 2: Pick Your Strategy** 🎲  
+Are you a risk-taker or playing it safe? Choose a strategy that matches your vibe (and risk tolerance).
+
+**Step 3: Set the Pace** ⚡  
+Decide how many trading cycles you want to run. More iterations = more opportunities for the AI to work its magic.
+
+**Step 4: Let the AI Cook** 🤖  
+Hit that button and watch the agent analyze market trends, sentiment, and news in real-time. Every trade is calculated, every move is strategic.
+
+---
+
+### 📋 JSON Portfolio Format
+
+Want to upload your portfolio? Here's the structure:
+```json
+{
+    "budget": 4000,
+    "stocks": {
+        "AAPL": 3,
+        "MSFT": 2,
+        "GOOGL": 4
+    }
+}
+```
+
+💡 **Pro Tip**: Keep an eye on the live updates - you'll see exactly when trades happen, how your portfolio shifts, and whether you're beating the "hold and pray" strategy!
+
+🚀 **Ready to trade smarter? Let's go!**"""
+)
             
             trade_history_output = gr.Dataframe(
-                label="Trade History (Live Updates)",
+                label="Trade History",
                 headers=["Iteration", "Ticker", "Action", "Quantity", "Price", "Total"],
-                wrap=True
+                wrap=True,
+                visible=False  # Start hidden, will show when first iteration completes
             )
     
     # Connect the run button with streaming output
@@ -408,30 +452,19 @@ with gr.Blocks(title="Auto-Trading Agent", theme=gr.themes.Soft()) as app:
         ]
     )
     
+
     gr.Markdown("""
     ---
-    ### Instructions
-    
-    1. **Setup Portfolio**: 
-       - **Manual**: Enter budget and add stocks in the table (Ticker + Quantity)
-       - **JSON Upload**: Upload a JSON file with your portfolio
-    2. **Choose Strategy**: Select a trading strategy that matches your risk tolerance
-    3. **Set Iterations**: Choose how many trading cycles to run
-    4. **Start Trading**: Click the button and watch live updates as each iteration completes!
-    
-    **JSON Format Example:**
-    ```json
-    {
-        "budget": 4000,
-        "stocks": {
-            "AAPL": 0.56,
-            "MSFT": 1.45,
-            "GOOGL": 2.0
-        }
-    }
-    ```
-    
-    💡 **Tip**: The trade history and portfolio comparison update after each iteration in real-time!
+    <div style="text-align: center;">
+    <h3> ✨ Crafted by Team Overfit </h3>
+    Văcărașu Dragoș-Ștefan · Țarcă Andrei-Ioan · Noje Raul <br>
+    <em>Built for educational purposes. Trade responsibly - past performance doesn't guarantee future results.<em>
+    </div>
+    """
+    )
+
+    gr.Markdown(""" 
+    ---
     """)
 
 if __name__ == "__main__":
