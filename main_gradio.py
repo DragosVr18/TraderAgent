@@ -164,14 +164,17 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
             temp_file.close()
             agent.setup_portfolio(budget, stocks, temp_file.name)
         
-        yield gr.update(visible=False), """## 🧠 AI Agent Initializing
+        yield gr.update(visible=False), """<div align="center">
 
-📊 Analyzing market conditions...  
-📰 Gathering latest news and sentiment data...  
-🔍 Evaluating portfolio holdings...  
-⚙️ Preparing trading strategy...
+<h3> 🧠 AI Agent Initializing </h3>
 
-""", f"⏳ Starting {num_iterations} iteration(s)..."
+📊 Analyzing market conditions...  <br>
+📰 Gathering latest news and sentiment data...  <br>
+🔍 Evaluating portfolio holdings...  <br>
+⚙️ Preparing trading strategy... <br>
+⏳ Starting first iteration...
+
+</div>""", f"⏳ Starting {num_iterations} iteration(s)..."
         
         # Run iterations with live updates
         all_results = []
@@ -268,7 +271,6 @@ def run_trading(budget, stocks_df, json_file, strategy, num_iterations):
 
 {format_portfolio_comparison(initial_portfolio, final_portfolio, initial_stock_prices, agent.stock_current)}
 """
-        
         yield trade_history_df, summary, "✅ Trading completed successfully!"
         
     except Exception as e:
@@ -305,8 +307,8 @@ def add_stock_row(stocks_df):
 def create_default_stocks():
     """Create default stocks dataframe."""
     return pd.DataFrame({
-        "Ticker": ["AAPL", "MSFT", "GOOGL", "NFLX", "META", "TSLA", "AMZN"],
-        "Quantity": [2, 2, 3, 4, 1, 2, 3]
+        "Ticker": ["AAPL", "MSFT", "GOOGL", "META", "TSLA"],
+        "Quantity": [2, 2, 1, 2, 3]
     })
 
 # Create Gradio interface
